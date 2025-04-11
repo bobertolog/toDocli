@@ -6,11 +6,14 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 	"todocli/internal/model"
+	"todocli/internal/repository"
+	"todocli/internal/service"
 )
 
 func main() {
-	tasks := []*model.Task{}
+	go service.StartTaskGenerator(5 * time.Second)
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
@@ -22,15 +25,14 @@ func main() {
 		fmt.Print("Выберите действие: ")
 
 		choiceStr, _ := reader.ReadString('\n')
-		choiceStr = strings.TrimSpace(choiceStr)
-		choice, err := strconv.Atoi(choiceStr)
+		choice, err := strconv.Atoi(strings.TrimSpace(choiceStr))
 		if err != nil {
-			fmt.Println("Неверный ввод, введите число.")
+			fmt.Println("Ошибка ввода:", err)
 			continue
 		}
 
 		switch choice {
-		case 1: // Добавление задачи
+		case 1:
 			fmt.Print("Название: ")
 			title, _ := reader.ReadString('\n')
 			title = strings.TrimSpace(title)
@@ -39,22 +41,28 @@ func main() {
 			desc, _ := reader.ReadString('\n')
 			desc = strings.TrimSpace(desc)
 
-			// Статус по умолчанию будет "TODO", так как мы убрали его из конструктора
-			newTask := model.NewTask(len(tasks)+1, title, desc)
-			tasks = append(tasks, newTask)
+			task := model.NewTask(len(repository.GetAllTasks())+1, title, desc)
+			_ = repository.Save(task)
 			fmt.Println("Задача добавлена!")
 
-		case 2: // Просмотр задач
+		case 2:
+			tasks := repository.GetAllTasks()
 			if len(tasks) == 0 {
-				fmt.Println("Нет задач для отображения.")
+				fmt.Println("Нет задач.")
 				continue
 			}
-			for _, t := range tasks {
-				fmt.Printf("ID: %d, Название: %s, Статус: %s, Создано: %s, Описание: %s\n",
-					t.ID, t.Title, t.Status(), t.CreatedAt.Format("2 Jan 2006 15:04"), t.Description)
+			for _, task := range tasks {
+				fmt.Printf(
+					"ID: %d, Название: %s, Статус: %s, Описание: %s\n",
+					task.GetEntityID(),
+					task.Title,
+					task.Status(),
+					task.Description,
+				)
 			}
 
-		case 3: // Обновление статуса
+		case 3:
+			tasks := repository.GetAllTasks()
 			if len(tasks) == 0 {
 				fmt.Println("Нет задач для обновления.")
 				continue
@@ -63,39 +71,47 @@ func main() {
 			fmt.Print("Введите ID задачи: ")
 			idStr, _ := reader.ReadString('\n')
 			id, err := strconv.Atoi(strings.TrimSpace(idStr))
-			if err != nil || id < 1 || id > len(tasks) {
-				fmt.Println("Неверный ID задачи.")
+			if err != nil {
+				fmt.Println("Ошибка: неверный ID")
 				continue
 			}
 
-			fmt.Println("Доступные статусы:")
+			var taskToUpdate *model.Task
+			for _, task := range tasks {
+				if task.GetEntityID() == id {
+					taskToUpdate = task
+					break
+				}
+			}
+
+			if taskToUpdate == nil {
+				fmt.Println("Задача не найдена!")
+				continue
+			}
+
+			fmt.Println("Выберите статус:")
 			fmt.Println("1. TODO")
 			fmt.Println("2. IN_PROGRESS")
 			fmt.Println("3. DONE")
-			fmt.Print("Выберите новый статус (1-3): ")
+			fmt.Print("Ваш выбор: ")
+			statusChoice, _ := reader.ReadString('\n')
+			statusChoice = strings.TrimSpace(statusChoice)
 
-			statusChoiceStr, _ := reader.ReadString('\n')
-			statusChoice, err := strconv.Atoi(strings.TrimSpace(statusChoiceStr))
-			if err != nil || statusChoice < 1 || statusChoice > 3 {
-				fmt.Println("Неверный выбор статуса.")
+			switch statusChoice {
+			case "1":
+				taskToUpdate.SetStatusType(model.StatusTodo)
+			case "2":
+				taskToUpdate.SetStatusType(model.StatusInProgress)
+			case "3":
+				taskToUpdate.SetStatusType(model.StatusDone)
+			default:
+				fmt.Println("Неверный статус!")
 				continue
 			}
+			fmt.Println("Статус обновлён!")
 
-			// Конвертируем выбор в StatusType
-			var newStatus model.StatusType
-			switch statusChoice {
-			case 1:
-				newStatus = model.StatusTodo
-			case 2:
-				newStatus = model.StatusInProgress
-			case 3:
-				newStatus = model.StatusDone
-			}
-
-			tasks[id-1].SetStatusType(newStatus)
-			fmt.Println("Статус обновлен!")
-
-		case 4: // Удаление задачи
+		case 4:
+			tasks := repository.GetAllTasks()
 			if len(tasks) == 0 {
 				fmt.Println("Нет задач для удаления.")
 				continue
@@ -104,27 +120,24 @@ func main() {
 			fmt.Print("Введите ID задачи: ")
 			idStr, _ := reader.ReadString('\n')
 			id, err := strconv.Atoi(strings.TrimSpace(idStr))
-			if err != nil || id < 1 || id > len(tasks) {
-				fmt.Println("Неверный ID задачи.")
+			if err != nil {
+				fmt.Println("Ошибка: неверный ID")
 				continue
 			}
 
-			// Удаляем задачу из слайса
-			tasks = append(tasks[:id-1], tasks[id:]...)
-
-			// Обновляем ID оставшихся задач
-			for i := id - 1; i < len(tasks); i++ {
-				tasks[i].ID = i + 1
+			err = repository.DeleteTask(id)
+			if err != nil {
+				fmt.Println("Ошибка:", err)
+				continue
 			}
-
 			fmt.Println("Задача удалена!")
 
-		case 5: // Выход
-			fmt.Println("До встречи!")
+		case 5:
+			fmt.Println("Выход...")
 			return
 
 		default:
-			fmt.Println("Неверный ввод, попробуйте снова.")
+			fmt.Println("Неверный выбор!")
 		}
 	}
 }
