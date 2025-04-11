@@ -7,12 +7,12 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"todocli/internal/model/task"
+	"todocli/internal/model"
 )
 
 // Основная функция  работы программы
 func main() {
-	tasks := []*task.Task{}
+	tasks := []*model.Task{}
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
@@ -47,14 +47,14 @@ func main() {
 			desc, _ := reader.ReadString('\n')
 			desc = strings.TrimSpace(desc)
 
-			newTask := task.NewTask(len(tasks)+1, title, status, desc)
+			newTask := model.NewTask(len(tasks)+1, title, status, desc)
 			tasks = append(tasks, newTask)
 			fmt.Println("Задача добавлена!")
 
 		case 2:
 			for _, t := range tasks {
 				fmt.Printf("ID: %d, Название: %s, Статус: %s, Создано: %s, Описание: %s\n",
-					t.GetID(), t.Title, t.GetStatus(), t.CreatedAt.Format("2 Jan 2006 15:04"), t.Description)
+					t.ID(), t.Title, t.Status(), t.CreatedAt.Format("2 Jan 2006 15:04"), t.Description)
 			}
 
 		case 3:
