@@ -1,38 +1,67 @@
 package model
 
-import "time"
+import (
+	"errors"
+	"time"
+)
 
-// Task — структура для задачи
+type StatusType int
+
+const (
+	StatusTodo StatusType = iota
+	StatusInProgress
+	StatusDone
+)
+
+func (s StatusType) String() string {
+	return [...]string{"TODO", "IN_PROGRESS", "DONE"}[s]
+}
+
 type Task struct {
-	id          int
+	ID          int // Сделали поле экспортируемым (публичным)
 	Title       string
-	status      string
+	status      StatusType
 	CreatedAt   time.Time
 	Description string
 }
 
-// NewTask — конструктор для создания задачи
-func NewTask(id int, title, status, description string) *Task {
+func NewTask(id int, title, description string) *Task {
 	return &Task{
-		id:          id,
+		ID:          id, // Используем новое имя поля
 		Title:       title,
-		status:      status,
+		status:      StatusTodo,
 		CreatedAt:   time.Now(),
 		Description: description,
 	}
 }
 
-// ID — метод для получения ID
-func (t *Task) ID() int {
-	return t.id
+// Удаляем метод ID(), так как теперь поле публичное
+// func (t *Task) ID() int {
+//     return t.id
+// }
+
+func (t *Task) Status() string {
+	return t.status.String()
 }
 
-// Status — метод для получения статуса
-func (t *Task) Status() string {
+func (t *Task) StatusType() StatusType {
 	return t.status
 }
 
-// SetStatus — метод для изменения статуса
-func (t *Task) SetStatus(newStatus string) {
-	t.status = newStatus
+func (t *Task) SetStatus(status string) error {
+	switch status {
+	case "TODO":
+		t.status = StatusTodo
+	case "IN_PROGRESS":
+		t.status = StatusInProgress
+	case "DONE":
+		t.status = StatusDone
+	default:
+		return errors.New("invalid status value")
+	}
+	return nil
+}
+
+func (t *Task) SetStatusType(status StatusType) {
+	t.status = status
 }
