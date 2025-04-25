@@ -85,7 +85,7 @@ func StartLogger(done <-chan struct{}) {
 
 				for _, task := range currentTasks {
 					if !lastSeen[task.GetEntityID()] {
-						log.Printf("Новая задача: ID=%d, Title=%s, Status=%s\n",
+						log.Printf("\nLog: Новая задача: ID=%d, Title=%s, Status=%s\n",
 							task.GetEntityID(), task.Title, task.Status())
 						lastSeen[task.GetEntityID()] = true
 					}
