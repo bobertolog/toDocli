@@ -17,8 +17,12 @@ func (s StatusType) String() string {
 	return [...]string{"TODO", "IN_PROGRESS", "DONE"}[s]
 }
 
+type Entity interface {
+	GetEntityID() int
+}
+
 type Task struct {
-	ID          int // Сделали поле экспортируемым (публичным)
+	id          int
 	Title       string
 	status      StatusType
 	CreatedAt   time.Time
@@ -27,7 +31,7 @@ type Task struct {
 
 func NewTask(id int, title, description string) *Task {
 	return &Task{
-		ID:          id, // Используем новое имя поля
+		id:          id,
 		Title:       title,
 		status:      StatusTodo,
 		CreatedAt:   time.Now(),
@@ -35,10 +39,9 @@ func NewTask(id int, title, description string) *Task {
 	}
 }
 
-// Удаляем метод ID(), так как теперь поле публичное
-// func (t *Task) ID() int {
-//     return t.id
-// }
+func (t *Task) GetEntityID() int {
+	return t.id
+}
 
 func (t *Task) Status() string {
 	return t.status.String()
