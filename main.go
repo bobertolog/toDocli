@@ -1,3 +1,4 @@
+// main.go
 package main
 
 import (
@@ -7,13 +8,19 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
 	"todocli/internal/model"
-	"todocli/internal/repository"
 	"todocli/internal/service"
 )
 
 func main() {
-	go service.StartTaskGenerator(5 * time.Second)
+	taskChan := make(chan *model.Task)
+	done := make(chan struct{})
+
+	go service.StartTaskGenerator(5*time.Second, taskChan)
+	go service.TaskSaver(taskChan)
+	go service.StartLogger(done)
+
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
@@ -41,33 +48,22 @@ func main() {
 			desc, _ := reader.ReadString('\n')
 			desc = strings.TrimSpace(desc)
 
-			task := model.NewTask(len(repository.GetAllTasks())+1, title, desc)
-			_ = repository.Save(task)
+			task := model.NewTask(service.GenerateTaskID(), title, desc)
+			service.AddTask(task)
 			fmt.Println("Задача добавлена!")
 
 		case 2:
-			tasks := repository.GetAllTasks()
+			tasks := service.GetAllTasks()
 			if len(tasks) == 0 {
 				fmt.Println("Нет задач.")
 				continue
 			}
 			for _, task := range tasks {
-				fmt.Printf(
-					"ID: %d, Название: %s, Статус: %s, Описание: %s\n",
-					task.GetEntityID(),
-					task.Title,
-					task.Status(),
-					task.Description,
-				)
+				fmt.Printf("ID: %d, Название: %s, Статус: %s, Описание: %s\n",
+					task.GetEntityID(), task.Title, task.Status(), task.Description)
 			}
 
 		case 3:
-			tasks := repository.GetAllTasks()
-			if len(tasks) == 0 {
-				fmt.Println("Нет задач для обновления.")
-				continue
-			}
-
 			fmt.Print("Введите ID задачи: ")
 			idStr, _ := reader.ReadString('\n')
 			id, err := strconv.Atoi(strings.TrimSpace(idStr))
@@ -76,15 +72,8 @@ func main() {
 				continue
 			}
 
-			var taskToUpdate *model.Task
-			for _, task := range tasks {
-				if task.GetEntityID() == id {
-					taskToUpdate = task
-					break
-				}
-			}
-
-			if taskToUpdate == nil {
+			task := service.FindTaskByID(id)
+			if task == nil {
 				fmt.Println("Задача не найдена!")
 				continue
 			}
@@ -99,11 +88,11 @@ func main() {
 
 			switch statusChoice {
 			case "1":
-				taskToUpdate.SetStatusType(model.StatusTodo)
+				task.SetStatusType(model.StatusTodo)
 			case "2":
-				taskToUpdate.SetStatusType(model.StatusInProgress)
+				task.SetStatusType(model.StatusInProgress)
 			case "3":
-				taskToUpdate.SetStatusType(model.StatusDone)
+				task.SetStatusType(model.StatusDone)
 			default:
 				fmt.Println("Неверный статус!")
 				continue
@@ -111,12 +100,6 @@ func main() {
 			fmt.Println("Статус обновлён!")
 
 		case 4:
-			tasks := repository.GetAllTasks()
-			if len(tasks) == 0 {
-				fmt.Println("Нет задач для удаления.")
-				continue
-			}
-
 			fmt.Print("Введите ID задачи: ")
 			idStr, _ := reader.ReadString('\n')
 			id, err := strconv.Atoi(strings.TrimSpace(idStr))
@@ -125,7 +108,7 @@ func main() {
 				continue
 			}
 
-			err = repository.DeleteTask(id)
+			err = service.DeleteTask(id)
 			if err != nil {
 				fmt.Println("Ошибка:", err)
 				continue
@@ -134,6 +117,7 @@ func main() {
 
 		case 5:
 			fmt.Println("Выход...")
+			close(done)
 			return
 
 		default:
