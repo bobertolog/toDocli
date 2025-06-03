@@ -1,12 +1,14 @@
-// main.go
 package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"todocli/internal/model"
@@ -14,12 +16,22 @@ import (
 )
 
 func main() {
-	taskChan := make(chan *model.Task)
-	done := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	go service.StartTaskGenerator(5*time.Second, taskChan)
-	go service.TaskSaver(taskChan)
-	go service.StartLogger(done)
+	taskChan := make(chan *model.Task)
+
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		<-sigCh
+		fmt.Println("\nЗавершение по сигналу ОС...")
+		cancel()
+	}()
+
+	go service.StartTaskGenerator(ctx, 5*time.Second, taskChan)
+	go service.TaskSaver(ctx, taskChan)
+	go service.StartLogger(ctx)
 
 	reader := bufio.NewReader(os.Stdin)
 
@@ -117,7 +129,8 @@ func main() {
 
 		case 5:
 			fmt.Println("Выход...")
-			close(done)
+			cancel()
+			time.Sleep(1 * time.Second) // дать время горутинам завершиться
 			return
 
 		default:
