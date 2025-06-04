@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -10,13 +12,18 @@ import (
 	"todocli/internal/repository"
 )
 
-var idCounter = 0
-var mu sync.Mutex
+const idFilePath = "data/id_counter.txt"
+
+var (
+	idCounter int
+	mu        sync.Mutex
+)
 
 func GenerateTaskID() int {
 	mu.Lock()
 	defer mu.Unlock()
 	idCounter++
+	_ = saveIDToFile()
 	return idCounter
 }
 
@@ -77,7 +84,7 @@ func StartLogger(ctx context.Context) {
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 
-	prevMap := make(map[int]bool)
+	seen := make(map[int]bool)
 
 	for {
 		select {
@@ -86,16 +93,33 @@ func StartLogger(ctx context.Context) {
 			return
 		case <-ticker.C:
 			tasks := GetAllTasks()
-			currentMap := make(map[int]bool)
 			for _, t := range tasks {
-				currentMap[t.GetEntityID()] = true
-			}
-			for _, t := range tasks {
-				if !prevMap[t.GetEntityID()] {
-					fmt.Printf("[LOG] Новая задача: ID=%d, Название=%s\n", t.GetEntityID(), t.Title)
+				id := t.GetEntityID()
+				if !seen[id] && !repository.WasTaskLoaded(id) {
+					fmt.Printf("[LOG] Новая задача: ID=%d, Название=%s\n", id, t.Title)
+					seen[id] = true
 				}
 			}
-			prevMap = currentMap
 		}
 	}
+}
+func InitIDCounter() error {
+	data, err := os.ReadFile(idFilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			idCounter = 0
+			return nil
+		}
+		return err
+	}
+	id, err := strconv.Atoi(string(data))
+	if err != nil {
+		return err
+	}
+	idCounter = id
+	return nil
+}
+
+func saveIDToFile() error {
+	return os.WriteFile(idFilePath, []byte(strconv.Itoa(idCounter)), 0644)
 }

@@ -10,14 +10,38 @@ import (
 )
 
 var (
-	taskStore = make(map[model.StatusType][]*model.Task)
-	mu        sync.RWMutex
-	dataDir   = "data"
+	taskStore     = make(map[model.StatusType][]*model.Task)
+	loadedTaskIDs = make(map[int]bool)
+	mu            sync.RWMutex
+	dataDir       = "data"
 )
 
-func init() {
+func InitStorage() error {
 	_ = os.MkdirAll(dataDir, 0755)
-	loadAllTasksFromFiles()
+	return LoadTasksFromFiles()
+}
+
+func LoadTasksFromFiles() error {
+	mu.Lock()
+	defer mu.Unlock()
+
+	for _, status := range []model.StatusType{model.StatusTodo, model.StatusInProgress, model.StatusDone} {
+		tasks, err := loadFromFile(status)
+		if err != nil {
+			return err
+		}
+		taskStore[status] = tasks
+		for _, task := range tasks {
+			loadedTaskIDs[task.GetEntityID()] = true
+		}
+	}
+	return nil
+}
+
+func WasTaskLoaded(id int) bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	return loadedTaskIDs[id]
 }
 
 func Save(entity model.Entity) error {
@@ -52,6 +76,7 @@ func DeleteTask(id int) error {
 		for i, t := range tasks {
 			if t.GetEntityID() == id {
 				taskStore[status] = append(tasks[:i], tasks[i+1:]...)
+				delete(loadedTaskIDs, id)
 				return saveToFile(status)
 			}
 		}
@@ -88,7 +113,7 @@ func loadFromFile(status model.StatusType) ([]*model.Task, error) {
 	data, err := os.ReadFile(file)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return []*model.Task{}, nil // no data yet
+			return []*model.Task{}, nil
 		}
 		return nil, err
 	}
@@ -97,13 +122,4 @@ func loadFromFile(status model.StatusType) ([]*model.Task, error) {
 		return nil, err
 	}
 	return tasks, nil
-}
-
-func loadAllTasksFromFiles() {
-	for _, status := range []model.StatusType{model.StatusTodo, model.StatusInProgress, model.StatusDone} {
-		tasks, err := loadFromFile(status)
-		if err == nil {
-			taskStore[status] = tasks
-		}
-	}
 }
