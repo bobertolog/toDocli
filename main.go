@@ -12,10 +12,20 @@ import (
 	"time"
 
 	"todocli/internal/model"
+	"todocli/internal/repository"
 	"todocli/internal/service"
 )
 
 func main() {
+	if err := repository.InitStorage(); err != nil {
+		fmt.Println("Ошибка инициализации хранилища:", err)
+		return
+	}
+	if err := service.InitIDCounter(); err != nil {
+		fmt.Println("Ошибка инициализации ID:", err)
+		return
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
