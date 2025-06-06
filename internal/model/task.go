@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -17,30 +18,51 @@ func (s StatusType) String() string {
 	return [...]string{"TODO", "IN_PROGRESS", "DONE"}[s]
 }
 
+func ParseStatus(status string) (StatusType, error) {
+	switch strings.ToUpper(status) {
+	case "TODO":
+		return StatusTodo, nil
+	case "IN_PROGRESS":
+		return StatusInProgress, nil
+	case "DONE":
+		return StatusDone, nil
+	default:
+		return StatusTodo, errors.New("некорректный статус")
+	}
+}
+
 type Entity interface {
 	GetEntityID() int
 }
 
 type Task struct {
-	id          int
-	Title       string
-	status      StatusType
-	CreatedAt   time.Time
-	Description string
+	ID          int        `json:"id"`
+	Title       string     `json:"title"`
+	Description string     `json:"description"`
+	StatusRaw   string     `json:"status"` // Для JSON: приходит как строка
+	status      StatusType // Внутреннее значение
+	CreatedAt   time.Time  `json:"created_at"`
 }
 
-func NewTask(id int, title, description string) *Task {
-	return &Task{
-		id:          id,
+func NewTask(id int, title, description, status string) (*Task, error) {
+	t := &Task{
+		ID:          id,
 		Title:       title,
-		status:      StatusTodo,
-		CreatedAt:   time.Now(),
 		Description: description,
+		StatusRaw:   status,
+		CreatedAt:   time.Now(),
 	}
+	err := t.NormalizeStatus()
+	return t, err
 }
 
-func (t *Task) GetEntityID() int {
-	return t.id
+func (t *Task) NormalizeStatus() error {
+	status, err := ParseStatus(t.StatusRaw)
+	if err != nil {
+		return err
+	}
+	t.status = status
+	return nil
 }
 
 func (t *Task) Status() string {
@@ -51,20 +73,11 @@ func (t *Task) StatusType() StatusType {
 	return t.status
 }
 
-func (t *Task) SetStatus(status string) error {
-	switch status {
-	case "TODO":
-		t.status = StatusTodo
-	case "IN_PROGRESS":
-		t.status = StatusInProgress
-	case "DONE":
-		t.status = StatusDone
-	default:
-		return errors.New("invalid status value")
-	}
-	return nil
+func (t *Task) SetStatusType(s StatusType) {
+	t.status = s
+	t.StatusRaw = s.String()
 }
 
-func (t *Task) SetStatusType(status StatusType) {
-	t.status = status
+func (t *Task) GetEntityID() int {
+	return t.ID
 }
