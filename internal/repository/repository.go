@@ -19,54 +19,44 @@ var (
 	idCounter     = 0
 )
 
-// Инициализация при запуске
-func init() {
-	_ = os.MkdirAll(dataDir, 0755)
+func Init() error {
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		return err
+	}
 	loadAllTasksFromFiles()
 	loadLastID()
+	return nil
 }
 
-// Получить уникальный ID
 func GenerateTaskID() int {
 	mu.Lock()
 	defer mu.Unlock()
 	idCounter++
-	saveLastID()
+	_ = os.WriteFile(idFile, []byte(strconv.Itoa(idCounter)), 0644)
 	return idCounter
 }
 
-// Сохранить задачу (новую или обновлённую)
-func Save(entity model.Entity) error {
+func Save(entity *model.Task) error {
 	mu.Lock()
 	defer mu.Unlock()
-
-	task, ok := entity.(*model.Task)
-	if !ok {
-		return errors.New("неизвестный тип сущности")
-	}
-
-	status := task.StatusType()
-	// Проверка — если такая задача уже есть, обновим её
+	status := entity.Status
 	for i, t := range taskStore[status] {
-		if t.GetEntityID() == task.GetEntityID() {
-			taskStore[status][i] = task
+		if t.ID == entity.ID {
+			taskStore[status][i] = entity
 			return saveToFile(status)
 		}
 	}
-	// Если новой ID — добавим
-	taskStore[status] = append(taskStore[status], task)
+	taskStore[status] = append(taskStore[status], entity)
 	return saveToFile(status)
 }
 
-// Удалить задачу по ID
 func DeleteTask(id int) error {
 	mu.Lock()
 	defer mu.Unlock()
-
-	for status, tasks := range taskStore {
-		for i, t := range tasks {
-			if t.GetEntityID() == id {
-				taskStore[status] = append(tasks[:i], tasks[i+1:]...)
+	for status, list := range taskStore {
+		for i, t := range list {
+			if t.ID == id {
+				taskStore[status] = append(list[:i], list[i+1:]...)
 				delete(loadedTaskIDs, id)
 				return saveToFile(status)
 			}
@@ -75,45 +65,38 @@ func DeleteTask(id int) error {
 	return errors.New("задача не найдена")
 }
 
-// Получить все задачи
 func GetAllTasks() []*model.Task {
 	mu.RLock()
 	defer mu.RUnlock()
-
 	var all []*model.Task
-	for _, tasks := range taskStore {
-		all = append(all, tasks...)
+	for _, list := range taskStore {
+		all = append(all, list...)
 	}
 	return all
 }
 
-// Найти задачу по ID
 func FindTaskByID(id int) *model.Task {
 	mu.RLock()
 	defer mu.RUnlock()
-
-	for _, tasks := range taskStore {
-		for _, task := range tasks {
-			if task.GetEntityID() == id {
-				return task
+	for _, list := range taskStore {
+		for _, t := range list {
+			if t.ID == id {
+				return t
 			}
 		}
 	}
 	return nil
 }
 
-// Проверить, была ли задача загружена из файла
 func WasTaskLoaded(id int) bool {
 	mu.RLock()
 	defer mu.RUnlock()
 	return loadedTaskIDs[id]
 }
 
-// Сохранить все задачи (по статусам)
 func SaveAll() error {
 	mu.RLock()
 	defer mu.RUnlock()
-
 	for status := range taskStore {
 		if err := saveToFile(status); err != nil {
 			return err
@@ -121,8 +104,6 @@ func SaveAll() error {
 	}
 	return nil
 }
-
-// ---------- Внутренние функции ----------
 
 func filenameForStatus(status model.StatusType) string {
 	switch status {
@@ -133,11 +114,10 @@ func filenameForStatus(status model.StatusType) string {
 	case model.StatusDone:
 		return filepath.Join(dataDir, "done_tasks.json")
 	default:
-		return filepath.Join(dataDir, "unknown_tasks.json")
+		return filepath.Join(dataDir, "unknown.json")
 	}
 }
 
-// Сохранение задач одного статуса в файл
 func saveToFile(status model.StatusType) error {
 	file := filenameForStatus(status)
 	data, err := json.MarshalIndent(taskStore[status], "", "  ")
@@ -147,48 +127,33 @@ func saveToFile(status model.StatusType) error {
 	return os.WriteFile(file, data, 0644)
 }
 
-// Загрузка задач одного статуса из файла
-func loadFromFile(status model.StatusType) ([]*model.Task, error) {
+func loadFromFile(status model.StatusType) []*model.Task {
 	file := filenameForStatus(status)
 	data, err := os.ReadFile(file)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return []*model.Task{}, nil
-		}
-		return nil, err
+		return []*model.Task{}
 	}
-	var tasks []*model.Task
-	if err := json.Unmarshal(data, &tasks); err != nil {
-		return nil, err
-	}
-	return tasks, nil
+	var list []*model.Task
+	_ = json.Unmarshal(data, &list)
+	return list
 }
 
-// Загрузка всех задач
 func loadAllTasksFromFiles() {
 	for _, status := range []model.StatusType{model.StatusTodo, model.StatusInProgress, model.StatusDone} {
-		tasks, err := loadFromFile(status)
-		if err == nil {
-			taskStore[status] = tasks
-			for _, task := range tasks {
-				loadedTaskIDs[task.GetEntityID()] = true
-			}
+		list := loadFromFile(status)
+		taskStore[status] = list
+		for _, t := range list {
+			loadedTaskIDs[t.ID] = true
 		}
 	}
 }
 
-// Сохранение текущего значения ID
-func saveLastID() {
-	_ = os.WriteFile(idFile, []byte(strconv.Itoa(idCounter)), 0644)
-}
-
-// Загрузка ID при старте
 func loadLastID() {
 	data, err := os.ReadFile(idFile)
-	if err == nil {
-		val, err := strconv.Atoi(string(data))
-		if err == nil {
-			idCounter = val
-		}
+	if err != nil {
+		return
+	}
+	if v, err := strconv.Atoi(string(data)); err == nil {
+		idCounter = v
 	}
 }
