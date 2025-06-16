@@ -3,8 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -12,43 +10,41 @@ import (
 	"todocli/internal/repository"
 )
 
-const idFilePath = "data/id_counter.txt"
+var mu sync.Mutex
 
-var (
-	idCounter int
-	mu        sync.Mutex
-)
-
+// Генерация ID через репозиторий
 func GenerateTaskID() int {
 	mu.Lock()
 	defer mu.Unlock()
-	idCounter++
-	_ = saveIDToFile()
-	return idCounter
+	return repository.GenerateTaskID()
 }
 
+// Добавить задачу
 func AddTask(task *model.Task) {
 	repository.Save(task)
 }
 
+// Получить все задачи
 func GetAllTasks() []*model.Task {
 	return repository.GetAllTasks()
 }
 
+// Найти задачу по ID
 func FindTaskByID(id int) *model.Task {
-	tasks := repository.GetAllTasks()
-	for _, task := range tasks {
-		if task.GetEntityID() == id {
-			return task
-		}
-	}
-	return nil
+	return repository.FindTaskByID(id)
 }
 
+// Удалить задачу по ID
 func DeleteTask(id int) error {
 	return repository.DeleteTask(id)
 }
 
+// Сохранить все задачи (вызов SaveAll из repository)
+func SaveAllTasks() error {
+	return repository.SaveAll()
+}
+
+// Генератор задач: каждые interval секунд отправляет задачу в канал
 func StartTaskGenerator(ctx context.Context, interval time.Duration, out chan<- *model.Task) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -59,12 +55,17 @@ func StartTaskGenerator(ctx context.Context, interval time.Duration, out chan<- 
 			fmt.Println("Генерация задач остановлена.")
 			return
 		case <-ticker.C:
-			task := model.NewTask(GenerateTaskID(), " Авто-задача", "Сгенерирована системой")
+			task, err := model.NewTask(GenerateTaskID(), "Авто-задача", "Сгенерировано системой", "TODO")
+			if err != nil {
+				fmt.Println("Ошибка генерации задачи:", err)
+				continue
+			}
 			out <- task
 		}
 	}
 }
 
+// Получает задачи из канала и сохраняет
 func TaskSaver(ctx context.Context, in <-chan *model.Task) {
 	for {
 		select {
@@ -78,8 +79,7 @@ func TaskSaver(ctx context.Context, in <-chan *model.Task) {
 	}
 }
 
-var previousCounts = make(map[string]int)
-
+// Логгер задач: отслеживает новые задачи и выводит в консоль
 func StartLogger(ctx context.Context) {
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
@@ -102,24 +102,4 @@ func StartLogger(ctx context.Context) {
 			}
 		}
 	}
-}
-func InitIDCounter() error {
-	data, err := os.ReadFile(idFilePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			idCounter = 0
-			return nil
-		}
-		return err
-	}
-	id, err := strconv.Atoi(string(data))
-	if err != nil {
-		return err
-	}
-	idCounter = id
-	return nil
-}
-
-func saveIDToFile() error {
-	return os.WriteFile(idFilePath, []byte(strconv.Itoa(idCounter)), 0644)
 }

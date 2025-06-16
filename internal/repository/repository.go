@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"todocli/internal/model"
 )
@@ -14,60 +15,50 @@ var (
 	loadedTaskIDs = make(map[int]bool)
 	mu            sync.RWMutex
 	dataDir       = "data"
+	idFile        = filepath.Join(dataDir, "last_id.txt")
+	idCounter     = 0
 )
 
-func InitStorage() error {
+// Инициализация при запуске
+func init() {
 	_ = os.MkdirAll(dataDir, 0755)
-	return LoadTasksFromFiles()
+	loadAllTasksFromFiles()
+	loadLastID()
 }
 
-func LoadTasksFromFiles() error {
+// Получить уникальный ID
+func GenerateTaskID() int {
 	mu.Lock()
 	defer mu.Unlock()
-
-	for _, status := range []model.StatusType{model.StatusTodo, model.StatusInProgress, model.StatusDone} {
-		tasks, err := loadFromFile(status)
-		if err != nil {
-			return err
-		}
-		taskStore[status] = tasks
-		for _, task := range tasks {
-			loadedTaskIDs[task.GetEntityID()] = true
-		}
-	}
-	return nil
+	idCounter++
+	saveLastID()
+	return idCounter
 }
 
-func WasTaskLoaded(id int) bool {
-	mu.RLock()
-	defer mu.RUnlock()
-	return loadedTaskIDs[id]
-}
-
+// Сохранить задачу (новую или обновлённую)
 func Save(entity model.Entity) error {
 	mu.Lock()
 	defer mu.Unlock()
 
 	task, ok := entity.(*model.Task)
 	if !ok {
-		return errors.New("unknown entity type")
+		return errors.New("неизвестный тип сущности")
 	}
+
 	status := task.StatusType()
+	// Проверка — если такая задача уже есть, обновим её
+	for i, t := range taskStore[status] {
+		if t.GetEntityID() == task.GetEntityID() {
+			taskStore[status][i] = task
+			return saveToFile(status)
+		}
+	}
+	// Если новой ID — добавим
 	taskStore[status] = append(taskStore[status], task)
 	return saveToFile(status)
 }
 
-func GetAllTasks() []*model.Task {
-	mu.RLock()
-	defer mu.RUnlock()
-
-	var all []*model.Task
-	for _, tasks := range taskStore {
-		all = append(all, tasks...)
-	}
-	return all
-}
-
+// Удалить задачу по ID
 func DeleteTask(id int) error {
 	mu.Lock()
 	defer mu.Unlock()
@@ -81,10 +72,57 @@ func DeleteTask(id int) error {
 			}
 		}
 	}
-	return errors.New("task not found")
+	return errors.New("задача не найдена")
 }
 
-// ---------- Persistence ----------
+// Получить все задачи
+func GetAllTasks() []*model.Task {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	var all []*model.Task
+	for _, tasks := range taskStore {
+		all = append(all, tasks...)
+	}
+	return all
+}
+
+// Найти задачу по ID
+func FindTaskByID(id int) *model.Task {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	for _, tasks := range taskStore {
+		for _, task := range tasks {
+			if task.GetEntityID() == id {
+				return task
+			}
+		}
+	}
+	return nil
+}
+
+// Проверить, была ли задача загружена из файла
+func WasTaskLoaded(id int) bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	return loadedTaskIDs[id]
+}
+
+// Сохранить все задачи (по статусам)
+func SaveAll() error {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	for status := range taskStore {
+		if err := saveToFile(status); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ---------- Внутренние функции ----------
 
 func filenameForStatus(status model.StatusType) string {
 	switch status {
@@ -99,6 +137,7 @@ func filenameForStatus(status model.StatusType) string {
 	}
 }
 
+// Сохранение задач одного статуса в файл
 func saveToFile(status model.StatusType) error {
 	file := filenameForStatus(status)
 	data, err := json.MarshalIndent(taskStore[status], "", "  ")
@@ -108,6 +147,7 @@ func saveToFile(status model.StatusType) error {
 	return os.WriteFile(file, data, 0644)
 }
 
+// Загрузка задач одного статуса из файла
 func loadFromFile(status model.StatusType) ([]*model.Task, error) {
 	file := filenameForStatus(status)
 	data, err := os.ReadFile(file)
@@ -122,4 +162,33 @@ func loadFromFile(status model.StatusType) ([]*model.Task, error) {
 		return nil, err
 	}
 	return tasks, nil
+}
+
+// Загрузка всех задач
+func loadAllTasksFromFiles() {
+	for _, status := range []model.StatusType{model.StatusTodo, model.StatusInProgress, model.StatusDone} {
+		tasks, err := loadFromFile(status)
+		if err == nil {
+			taskStore[status] = tasks
+			for _, task := range tasks {
+				loadedTaskIDs[task.GetEntityID()] = true
+			}
+		}
+	}
+}
+
+// Сохранение текущего значения ID
+func saveLastID() {
+	_ = os.WriteFile(idFile, []byte(strconv.Itoa(idCounter)), 0644)
+}
+
+// Загрузка ID при старте
+func loadLastID() {
+	data, err := os.ReadFile(idFile)
+	if err == nil {
+		val, err := strconv.Atoi(string(data))
+		if err == nil {
+			idCounter = val
+		}
+	}
 }
