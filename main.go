@@ -3,50 +3,48 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
+	"log"
 	"time"
 
-	"github.com/gorilla/mux"
-
 	"todocli/internal/handlers"
+	"todocli/internal/handlers/middleware"
 	"todocli/internal/model"
+	"todocli/internal/repository"
 	"todocli/internal/service"
+
+	_ "todocli/docs"
+
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func main() {
-	// Канал завершения по Ctrl+C
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Ошибка загрузки .env файла")
+	}
+	if err := repository.Init(); err != nil {
+		fmt.Println("init repository error:", err)
+		return
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	go func() {
-		sigCh := make(chan os.Signal, 1)
-		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-		<-sigCh
-		fmt.Println("\nЗавершение по сигналу ОС...")
-		cancel()
-	}()
-
-	taskChan := make(chan *model.Task)
-
-	// Запуск фоновых сервисов
-	go service.StartTaskGenerator(ctx, 5*time.Second, taskChan)
-	go service.TaskSaver(ctx, taskChan)
+	go service.StartTaskGenerator(ctx, 5*time.Second, make(chan *model.Task))
+	go service.TaskSaver(ctx, make(chan *model.Task))
 	go service.StartLogger(ctx)
 
-	// Инициализация маршрутов
-	r := mux.NewRouter()
-	r.HandleFunc("/api/item", handlers.CreateTaskHandler).Methods("POST")
-	r.HandleFunc("/api/item/{id}", handlers.UpdateTaskHandler).Methods("PUT")
-	r.HandleFunc("/api/items", handlers.GetAllTasksHandler).Methods("GET")
-	r.HandleFunc("/api/item/{id}", handlers.GetTaskByIDHandler).Methods("GET")
-	r.HandleFunc("/api/item/{id}", handlers.DeleteTaskHandler).Methods("DELETE")
+	r := gin.Default()
+	r.POST("/login", handlers.Login)
+	auth := r.Group("/api", middleware.JWTAuth())
+	auth.POST("/item", handlers.CreateTask)
+	auth.GET("/items", handlers.GetAllTasks)
+	auth.GET("/item/:id", handlers.GetTaskByID)
+	auth.PUT("/item/:id", handlers.UpdateTask)
+	auth.DELETE("/item/:id", handlers.DeleteTask)
 
-	// Запуск сервера
-	fmt.Println("Сервер запущен: http://localhost:8080")
-	if err := http.ListenAndServe(":8080", r); err != nil {
-		fmt.Println("Ошибка сервера:", err)
-	}
+	r.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	r.Run(":8080")
 }

@@ -1,131 +1,93 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 
-	"github.com/gorilla/mux"
-
 	"todocli/internal/model"
 	"todocli/internal/service"
+
+	"github.com/gin-gonic/gin"
 )
 
-// POST /api/item — создать задачу
-func CreateTaskHandler(w http.ResponseWriter, r *http.Request) {
+func CreateTask(c *gin.Context) {
 	var t model.Task
-	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
-		http.Error(w, "Ошибка декодирования JSON: "+err.Error(), http.StatusBadRequest)
+	if err := c.ShouldBindJSON(&t); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
 		return
 	}
-
 	if t.Title == "" {
-		http.Error(w, "Поле 'title' обязательно", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "title required"})
 		return
 	}
-
-	if err := t.NormalizeStatus(); err != nil {
-		http.Error(w, "Неверный статус: "+err.Error(), http.StatusBadRequest)
+	if err := t.Normalize(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
 		return
 	}
-
 	t.ID = service.GenerateTaskID()
 	service.AddTask(&t)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(t)
+	c.JSON(http.StatusCreated, t)
 }
 
-// PUT /api/item/{id} — обновить задачу по ID
-func UpdateTaskHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	idStr := vars["id"]
+func GetAllTasks(c *gin.Context) {
+	c.JSON(http.StatusOK, service.GetAllTasks())
+}
 
-	id, err := strconv.Atoi(idStr)
+func GetTaskByID(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		http.Error(w, "Некорректный ID", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
+	if t := service.FindTaskByID(id); t != nil {
+		c.JSON(http.StatusOK, t)
+	} else {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+	}
+}
 
-	existing := service.FindTaskByID(id)
-	if existing == nil {
-		http.Error(w, "Задача не найдена", http.StatusNotFound)
+func UpdateTask(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
-
-	var updated model.Task
-	if err := json.NewDecoder(r.Body).Decode(&updated); err != nil {
-		http.Error(w, "Ошибка декодирования JSON: "+err.Error(), http.StatusBadRequest)
+	ex := service.FindTaskByID(id)
+	if ex == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
-
-	// Обновление данных задачи
-	if updated.Title != "" {
-		existing.Title = updated.Title
+	var upd model.Task
+	if err := c.ShouldBindJSON(&upd); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
+		return
 	}
-	if updated.Description != "" {
-		existing.Description = updated.Description
+	if upd.Title != "" {
+		ex.Title = upd.Title
 	}
-	if updated.StatusRaw != "" {
-		existing.StatusRaw = updated.StatusRaw
-		if err := existing.NormalizeStatus(); err != nil {
-			http.Error(w, "Неверный статус: "+err.Error(), http.StatusBadRequest)
+	if upd.Description != "" {
+		ex.Description = upd.Description
+	}
+	if upd.StatusRaw != "" {
+		ex.StatusRaw = upd.StatusRaw
+		if err := ex.Normalize(); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
 			return
 		}
 	}
-
-	if err := service.SaveAllTasks(); err != nil {
-		http.Error(w, "Ошибка при сохранении: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(existing)
+	service.SaveAllTasks()
+	c.JSON(http.StatusOK, ex)
 }
 
-// GET /api/items — получить все задачи
-func GetAllTasksHandler(w http.ResponseWriter, r *http.Request) {
-	tasks := service.GetAllTasks()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(tasks)
-}
-
-// GET /api/item/{id} — получить задачу по ID
-func GetTaskByIDHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	idStr := vars["id"]
-
-	id, err := strconv.Atoi(idStr)
+func DeleteTask(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		http.Error(w, "Некорректный ID", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
-
-	task := service.FindTaskByID(id)
-	if task == nil {
-		http.Error(w, "Задача не найдена", http.StatusNotFound)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(task)
-}
-
-// DELETE /api/item/{id} — удалить задачу
-func DeleteTaskHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	idStr := vars["id"]
-
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		http.Error(w, "Некорректный ID", http.StatusBadRequest)
-		return
-	}
-
 	if err := service.DeleteTask(id); err != nil {
-		http.Error(w, "Ошибка удаления: "+err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
-
-	w.WriteHeader(http.StatusNoContent)
+	c.Status(http.StatusNoContent)
 }
