@@ -1,86 +1,25 @@
+// internal/service/service.go
+
 package service
 
 import (
-	"context"
-	"fmt"
-	"sync"
-	"time"
 	"todocli/internal/model"
-	"todocli/internal/repository"
 )
 
-var mu sync.Mutex
-
-func GenerateTaskID() int {
-	return repository.GenerateTaskID()
+// TaskRepository описывает зависимости от хранилища
+type TaskRepository interface {
+	Save(task *model.Task) error
+	Update(task *model.Task) error
+	GetAll() []*model.Task
+	FindByID(id int) *model.Task
+	Delete(id int) error
 }
 
-func AddTask(t *model.Task) {
-	repository.Save(t)
-}
-
-func GetAllTasks() []*model.Task {
-	return repository.GetAllTasks()
-}
-
-func FindTaskByID(id int) *model.Task {
-	return repository.FindTaskByID(id)
-}
-
-func DeleteTask(id int) error {
-	return repository.DeleteTask(id)
-}
-
-func SaveAllTasks() error {
-	return repository.SaveAll()
-}
-
-func StartTaskGenerator(ctx context.Context, interval time.Duration, out chan<- *model.Task) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			fmt.Println("Генерация задач остановлена.")
-			return
-		case <-ticker.C:
-			t, err := model.NewTask(GenerateTaskID(), "Авто-задача", "Сгенерировано системой", "TODO")
-			if err == nil {
-				out <- t
-			}
-		}
-	}
-}
-
-func TaskSaver(ctx context.Context, in <-chan *model.Task) {
-	for {
-		select {
-		case <-ctx.Done():
-			fmt.Println("Сохранение задач завершено.")
-			return
-		case t := <-in:
-			AddTask(t)
-			fmt.Println("Задача сохранена:", t.Title)
-		}
-	}
-}
-
-func StartLogger(ctx context.Context) {
-	ticker := time.NewTicker(200 * time.Millisecond)
-	defer ticker.Stop()
-	seen := make(map[int]bool)
-	for {
-		select {
-		case <-ctx.Done():
-			fmt.Println("Логгер завершён.")
-			return
-		case <-ticker.C:
-			for _, t := range GetAllTasks() {
-				if !seen[t.ID] && !repository.WasTaskLoaded(t.ID) {
-					fmt.Printf("[LOG] Новая задача: ID=%d, Title=%s\n", t.ID, t.Title)
-					seen[t.ID] = true
-				}
-			}
-		}
-	}
+// TaskService — интерфейс бизнес-логики
+type TaskService interface {
+	Create(title, desc, status string) (*model.Task, error)
+	GetAll() []*model.Task
+	GetByID(id int) (*model.Task, error)
+	Update(id int, title, desc, status string) error
+	Delete(id int) error
 }
