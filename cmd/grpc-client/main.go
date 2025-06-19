@@ -3,9 +3,7 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
-	"os"
 	"time"
 
 	"todocli/pb"
@@ -14,22 +12,14 @@ import (
 )
 
 func main() {
-	// Флаги
-	listFlag := flag.Bool("list", false, "Вывести все задачи")
-	createFlag := flag.Bool("create", false, "Создать новую задачу")
-	getFlag := flag.Int("get", 0, "Получить задачу по ID")
-	deleteFlag := flag.Int("delete", 0, "Удалить задачу по ID")
-
-	title := flag.String("title", "", "Заголовок задачи (для создания)")
-	desc := flag.String("desc", "", "Описание задачи (для создания)")
-	status := flag.String("status", "TODO", "Статус задачи: TODO, IN_PROGRESS, DONE")
-
+	// Флаг для удаления задачи по ID
+	deleteID := flag.Int("delete", 0, "ID задачи для удаления")
 	flag.Parse()
 
-	// Подключение к gRPC
+	// Подключение к gRPC серверу
 	conn, err := grpc.Dial("localhost:50051", grpc.WithInsecure())
 	if err != nil {
-		log.Fatalf("Ошибка подключения к серверу: %v", err)
+		log.Fatal(err)
 	}
 	defer conn.Close()
 
@@ -38,59 +28,42 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Обработка команд
-	switch {
-	case *listFlag:
-		res, err := client.ListTasks(ctx, &pb.Empty{})
+	// Если передан флаг --delete
+	if *deleteID > 0 {
+		_, err := client.DeleteTask(ctx, &pb.TaskID{Id: int32(*deleteID)})
 		if err != nil {
-			log.Fatalf("Ошибка ListTasks: %v", err)
+			log.Fatalf("Ошибка удаления задачи с ID %d: %v", *deleteID, err)
 		}
-		if len(res.Tasks) == 0 {
-			fmt.Println("Список задач пуст.")
-			return
-		}
-		fmt.Println("Список задач:")
-		for _, t := range res.Tasks {
-			fmt.Printf("  [%d] %s (%s)\n    %s\n", t.Id, t.Title, t.Status, t.Description)
-		}
+		log.Printf("Задача с ID %d успешно удалена.\n", *deleteID)
+		return
+	}
 
-	case *createFlag:
-		if *title == "" || *desc == "" {
-			fmt.Println("Для создания задачи укажите --title и --desc")
-			os.Exit(1)
-		}
-		task := &pb.Task{
-			Title:       *title,
-			Description: *desc,
-			Status:      *status,
-		}
-		res, err := client.CreateTask(ctx, task)
-		if err != nil {
-			log.Fatalf("Ошибка CreateTask: %v", err)
-		}
-		fmt.Printf("Задача создана с ID: %d\n", res.Id)
+	// 1. Создание задачи
+	task := &pb.Task{
+		Title:       "Тут будет размещаться название задачи",
+		Description: "А тут будет описание задачи",
+		Status:      "TODO",
+	}
+	res, err := client.CreateTask(ctx, task)
+	if err != nil {
+		log.Fatal("CreateTask error:", err)
+	}
+	log.Println("Создана задача с ID:", res.Id)
 
-	case *getFlag > 0:
-		res, err := client.GetTask(ctx, &pb.TaskID{Id: int32(*getFlag)})
-		if err != nil {
-			log.Fatalf("Ошибка GetTask: %v", err)
-		}
-		fmt.Printf("Задача %d:\n  Заголовок: %s\n  Статус: %s\n  Описание: %s\n",
-			res.Id, res.Title, res.Status, res.Description)
+	// 2. Получение задачи по ID
+	got, err := client.GetTask(ctx, &pb.TaskID{Id: res.Id})
+	if err != nil {
+		log.Fatal("GetTask error:", err)
+	}
+	log.Printf("Задача получена: %+v\n", got)
 
-	case *deleteFlag > 0:
-		_, err := client.DeleteTask(ctx, &pb.TaskID{Id: int32(*deleteFlag)})
-		if err != nil {
-			log.Fatalf("Ошибка DeleteTask: %v", err)
-		}
-		fmt.Printf("Задача %d удалена.\n", *deleteFlag)
-
-	default:
-		fmt.Println("Использование:")
-		fmt.Println("  --list                        Показать все задачи")
-		fmt.Println("  --get <id>                   Получить задачу по ID")
-		fmt.Println("  --delete <id>                Удалить задачу по ID")
-		fmt.Println("  --create --title T --desc D  Создать задачу")
-		fmt.Println("         [--status TODO|IN_PROGRESS|DONE]")
+	// 3. Список всех задач
+	list, err := client.ListTasks(ctx, &pb.Empty{})
+	if err != nil {
+		log.Fatal("ListTasks error:", err)
+	}
+	log.Println("Все задачи:")
+	for _, t := range list.Tasks {
+		log.Printf(" - [%d] %s (%s)", t.Id, t.Title, t.Status)
 	}
 }
