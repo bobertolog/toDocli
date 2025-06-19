@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package task;
+option go_package = "todocli/pb";
+
+message Task {
+  int32 id = 1;
+  string title = 2;
+  string description = 3;
+  string status = 4;
+}
+
+message TaskID {
+  int32 id = 1;
+}
+
+message TaskList {
+  repeated Task tasks = 1;
+}
+
+service TaskService {
+  rpc CreateTask(Task) returns (TaskID);
+  rpc GetTask(TaskID) returns (Task);
+  rpc ListTasks(Empty) returns (TaskList);
+  rpc UpdateTask(Task) returns (Task);
+  rpc DeleteTask(TaskID) returns (Empty);
+}
+
+message Empty {}
