@@ -1,8 +1,8 @@
 package main
 
 import (
-	"context"
 	"log"
+	"os"
 
 	"todocli/internal/handlers"
 	"todocli/internal/handlers/middleware"
@@ -16,36 +16,33 @@ import (
 	"github.com/redis/go-redis/v9"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func main() {
-	// Загрузка .env (если есть)
-	err := godotenv.Load()
+	// Загружаем переменные окружения из .env
+	_ = godotenv.Load()
+
+	// Подключаемся к PostgreSQL
+	repo, err := repository.NewPostgresRepository()
 	if err != nil {
-		log.Println("Не найден .env, продолжаем без него")
+		log.Fatalf("Ошибка подключения к PostgreSQL: %v", err)
 	}
 
-	// Подключение к MongoDB
-	mongoCol := connectMongo()
-	repo := repository.NewMongoRepo(mongoCol)
+	// Создаём сервис задач
+	taskService := service.NewTaskService(repo)
 
-	// Подключение к Redis
+	// Подключаемся к Redis для логгирования
 	redisClient := connectRedis()
 	logger := repository.NewRedisLogger(redisClient)
-
-	// Создаём сервис с Mongo-репозиторием
-	taskService := service.NewTaskService(repo)
 
 	// Передаём зависимости в handlers
 	handlers.SetService(taskService)
 	handlers.SetLogger(logger)
 
-	// HTTP-сервер
+	// Настраиваем Gin HTTP сервер
 	r := gin.Default()
 
+	// Роуты
 	r.POST("/login", handlers.Login)
 
 	auth := r.Group("/api", middleware.JWTAuth())
@@ -57,15 +54,11 @@ func main() {
 
 	r.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	r.Run(":8080")
-}
-
-func connectMongo() *mongo.Collection {
-	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://localhost:27017"))
-	if err != nil {
-		log.Fatal("Mongo connect error:", err)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
 	}
-	return client.Database("tododb").Collection("tasks")
+	r.Run(":" + port)
 }
 
 func connectRedis() *redis.Client {
