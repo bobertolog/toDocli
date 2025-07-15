@@ -1,0 +1,16 @@
+mode: set
+todocli/internal/service/task_service_impl.go:14.54,16.2 1 1
+todocli/internal/service/task_service_impl.go:18.79,20.16 2 1
+todocli/internal/service/task_service_impl.go:20.16,22.3 1 0
+todocli/internal/service/task_service_impl.go:23.2,24.15 2 1
+todocli/internal/service/task_service_impl.go:27.46,29.2 1 0
+todocli/internal/service/task_service_impl.go:31.60,33.14 2 0
+todocli/internal/service/task_service_impl.go:33.14,35.3 1 0
+todocli/internal/service/task_service_impl.go:36.2,36.15 1 0
+todocli/internal/service/task_service_impl.go:39.72,41.14 2 1
+todocli/internal/service/task_service_impl.go:41.14,43.3 1 0
+todocli/internal/service/task_service_impl.go:44.2,48.16 4 1
+todocli/internal/service/task_service_impl.go:48.16,50.3 1 0
+todocli/internal/service/task_service_impl.go:51.2,52.25 2 1
+todocli/internal/service/task_service_impl.go:55.44,57.2 1 1
+todocli/internal/service/task_service_impl.go:64.27,69.2 4 1

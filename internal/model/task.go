@@ -2,11 +2,9 @@ package model
 
 import (
 	"errors"
-	"strings"
 	"time"
 )
 
-// StatusType ...
 type StatusType int
 
 const (
@@ -20,7 +18,7 @@ func (s StatusType) String() string {
 }
 
 func ParseStatus(s string) (StatusType, error) {
-	switch strings.ToUpper(s) {
+	switch s {
 	case "TODO":
 		return StatusTodo, nil
 	case "IN_PROGRESS":
@@ -28,34 +26,28 @@ func ParseStatus(s string) (StatusType, error) {
 	case "DONE":
 		return StatusDone, nil
 	default:
-		return StatusTodo, errors.New("invalid status")
+		return 0, errors.New("invalid status")
 	}
 }
 
-// Task ...
 type Task struct {
-	ID          int        `json:"id"`
-	Title       string     `json:"title"`
-	Description string     `json:"description"`
-	StatusRaw   string     `json:"status"` // From JSON
-	Status      StatusType `json:"-"`
-	CreatedAt   time.Time  `json:"created_at"`
-}
-
-func (t *Task) Normalize() error {
-	st, err := ParseStatus(t.StatusRaw)
-	if err != nil {
-		return err
-	}
-	t.Status = st
-	t.StatusRaw = st.String()
-	return nil
+	ID          int
+	Title       string
+	Description string
+	Status      StatusType
+	CreatedAt   time.Time
 }
 
 func NewTask(id int, title, description, status string) (*Task, error) {
-	t := &Task{ID: id, Title: title, Description: description, StatusRaw: status, CreatedAt: time.Now()}
-	if err := t.Normalize(); err != nil {
+	s, err := ParseStatus(status)
+	if err != nil {
 		return nil, err
 	}
-	return t, nil
+	return &Task{
+		ID:          id,
+		Title:       title,
+		Description: description,
+		Status:      s,
+		CreatedAt:   time.Now(),
+	}, nil
 }
