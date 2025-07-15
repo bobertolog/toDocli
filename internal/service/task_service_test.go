@@ -42,6 +42,11 @@ func (m *mockRepo) Delete(id int) error {
 	return nil
 }
 
+// ✅ Заглушка для транзакций
+func (m *mockRepo) WithTx(fn func(TaskRepository) error) error {
+	return fn(m)
+}
+
 func TestTaskService_Create(t *testing.T) {
 	repo := newMockRepo()
 	svc := NewTaskService(repo)
@@ -107,6 +112,7 @@ func TestTaskService_Update_InvalidStatus(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid status")
 }
+
 func TestTaskService_GetByID_NotFound(t *testing.T) {
 	repo := newMockRepo()
 	svc := NewTaskService(repo)
