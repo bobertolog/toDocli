@@ -1,7 +1,10 @@
 package model
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -13,6 +16,23 @@ const (
 	StatusDone
 )
 
+func (s *StatusType) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+	switch strings.ToUpper(str) {
+	case "TODO":
+		*s = StatusTodo
+	case "IN_PROGRESS":
+		*s = StatusInProgress
+	case "DONE":
+		*s = StatusDone
+	default:
+		return fmt.Errorf("invalid status: %s", str)
+	}
+	return nil
+}
 func (s StatusType) String() string {
 	return [...]string{"TODO", "IN_PROGRESS", "DONE"}[s]
 }

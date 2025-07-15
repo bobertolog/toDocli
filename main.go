@@ -2,13 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
-	"time"
 
 	"todocli/internal/handlers"
 	"todocli/internal/handlers/middleware"
-	"todocli/internal/model"
 	"todocli/internal/repository"
 	"todocli/internal/service"
 
@@ -16,28 +13,41 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func main() {
+	// Загрузка .env (если есть)
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Ошибка загрузки .env файла")
-	}
-	if err := repository.Init(); err != nil {
-		fmt.Println("init repository error:", err)
-		return
+		log.Println("Не найден .env, продолжаем без него")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go service.StartTaskGenerator(ctx, 5*time.Second, make(chan *model.Task))
-	go service.TaskSaver(ctx, make(chan *model.Task))
-	go service.StartLogger(ctx)
+	// Подключение к MongoDB
+	mongoCol := connectMongo()
+	repo := repository.NewMongoRepo(mongoCol)
 
+	// Подключение к Redis
+	redisClient := connectRedis()
+	logger := repository.NewRedisLogger(redisClient)
+
+	// Создаём сервис с Mongo-репозиторием
+	taskService := service.NewTaskService(repo)
+
+	// Передаём зависимости в handlers
+	handlers.SetService(taskService)
+	handlers.SetLogger(logger)
+
+	// HTTP-сервер
 	r := gin.Default()
+
 	r.POST("/login", handlers.Login)
+
 	auth := r.Group("/api", middleware.JWTAuth())
 	auth.POST("/item", handlers.CreateTask)
 	auth.GET("/items", handlers.GetAllTasks)
@@ -46,5 +56,20 @@ func main() {
 	auth.DELETE("/item/:id", handlers.DeleteTask)
 
 	r.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	r.Run(":8080")
+}
+
+func connectMongo() *mongo.Collection {
+	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://localhost:27017"))
+	if err != nil {
+		log.Fatal("Mongo connect error:", err)
+	}
+	return client.Database("tododb").Collection("tasks")
+}
+
+func connectRedis() *redis.Client {
+	return redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+	})
 }
