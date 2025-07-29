@@ -1,17 +1,42 @@
-version: '3.8'
+version: "3.9"
 
 services:
-  db:
-    image: postgres:14
-    container_name: todocli-postgres
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: todocli_app
+    depends_on:
+      - db
+      - redis
+    ports:
+      - "8080:8080"
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: tododb
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=tasks
+      - REDIS_ADDR=redis:6379
+
+  db:
+    image: postgres:15
+    container_name: todocli_postgres
+    restart: always
     ports:
       - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: tasks
     volumes:
       - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    container_name: todocli_redis
+    ports:
+      - "6379:6379"
 
 volumes:
   pgdata:

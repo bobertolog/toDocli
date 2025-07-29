@@ -6,20 +6,25 @@ import (
 	"strconv"
 
 	"todocli/internal/model"
-	"todocli/internal/repository"
 	"todocli/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
 
 var taskService service.TaskService
-var logger *repository.RedisLogger
+
+// Объявляем интерфейс Logger
+type Logger interface {
+	Log(msg string) error
+}
+
+var logger Logger // теперь это интерфейс, а не конкретный RedisLogger
 
 func SetService(s service.TaskService) {
 	taskService = s
 }
 
-func SetLogger(l *repository.RedisLogger) {
+func SetLogger(l Logger) {
 	logger = l
 }
 
@@ -35,7 +40,10 @@ func CreateTask(c *gin.Context) {
 		return
 	}
 	task, err := taskService.CreateWithLog(t.Title, t.Description, t.Status.String(), func(msg string) error {
-		return logger.Log(msg)
+		if logger != nil {
+			return logger.Log(msg)
+		}
+		return nil
 	})
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -85,7 +93,9 @@ func UpdateTask(c *gin.Context) {
 		return
 	}
 
-	_ = logger.Log(fmt.Sprintf("update: %d", id))
+	if logger != nil {
+		_ = logger.Log(fmt.Sprintf("update: %d", id))
+	}
 	c.JSON(http.StatusOK, gin.H{"result": "updated"})
 }
 
@@ -103,6 +113,8 @@ func DeleteTask(c *gin.Context) {
 		return
 	}
 
-	_ = logger.Log(fmt.Sprintf("delete: %d", id))
+	if logger != nil {
+		_ = logger.Log(fmt.Sprintf("delete: %d", id))
+	}
 	c.Status(http.StatusNoContent)
 }

@@ -36,6 +36,16 @@ func (s *taskService) GetByID(id int) (*model.Task, error) {
 	return t, nil
 }
 
+func (s *taskService) GetByStatus(status string) []*model.Task {
+	var result []*model.Task
+	for _, t := range s.repo.GetAll() {
+		if string(t.Status) == status {
+			result = append(result, t)
+		}
+	}
+	return result
+}
+
 func (s *taskService) Update(id int, title, desc, status string) error {
 	t := s.repo.FindByID(id)
 	if t == nil {
@@ -44,7 +54,7 @@ func (s *taskService) Update(id int, title, desc, status string) error {
 	t.Title = title
 	t.Description = desc
 
-	st, err := model.ParseStatus(status) // ❗ Используй другое имя переменной!
+	st, err := model.ParseStatus(status)
 	if err != nil {
 		return err
 	}

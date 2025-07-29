@@ -122,3 +122,18 @@ func TestTaskService_GetByID_NotFound(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
+func TestTaskService_GetByStatus(t *testing.T) {
+	repo := newMockRepo()
+	svc := NewTaskService(repo)
+
+	svc.Create("Task 1", "desc", "TODO")
+	svc.Create("Task 2", "desc", "DONE")
+	svc.Create("Task 3", "desc", "TODO")
+
+	tasks := svc.GetByStatus("TODO")
+
+	assert.Len(t, tasks, 2)
+	for _, task := range tasks {
+		assert.Equal(t, "TODO", task.Status.String())
+	}
+}
