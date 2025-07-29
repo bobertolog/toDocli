@@ -67,3 +67,23 @@ func GenerateTaskID() int {
 	idCounter++
 	return idCounter
 }
+
+func (s *taskService) CreateWithLog(title, desc, status string, logFunc func(msg string) error) (*model.Task, error) {
+	var task *model.Task
+	err := s.repo.WithTx(func(r TaskRepository) error {
+		t, err := model.NewTask(0, title, desc, status)
+		if err != nil {
+			return err
+		}
+		if err := r.Save(t); err != nil {
+			return err
+		}
+		task = t
+
+		if err := logFunc(fmt.Sprintf("created task %d", t.ID)); err != nil {
+			return err
+		}
+		return nil
+	})
+	return task, err
+}

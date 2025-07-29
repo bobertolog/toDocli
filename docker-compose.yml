@@ -1,18 +1,17 @@
-version: '3'
-services:
-  mongo:
-    image: mongo
-    container_name: mongo
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo-data:/data/db
+version: '3.8'
 
-  redis:
-    image: redis
-    container_name: redis
+services:
+  db:
+    image: postgres:14
+    container_name: todocli-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: tododb
     ports:
-      - "6379:6379"
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
 
 volumes:
-  mongo-data:
+  pgdata:

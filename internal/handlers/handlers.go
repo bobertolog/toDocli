@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -33,12 +34,13 @@ func CreateTask(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "title required"})
 		return
 	}
-	task, err := taskService.Create(t.Title, t.Description, t.Status.String())
+	task, err := taskService.CreateWithLog(t.Title, t.Description, t.Status.String(), func(msg string) error {
+		return logger.Log(msg)
+	})
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	_ = logger.Log("create", task.Title)
 	c.JSON(http.StatusCreated, task)
 }
 
@@ -83,7 +85,7 @@ func UpdateTask(c *gin.Context) {
 		return
 	}
 
-	_ = logger.Log("update", strconv.Itoa(id))
+	_ = logger.Log(fmt.Sprintf("update: %d", id))
 	c.JSON(http.StatusOK, gin.H{"result": "updated"})
 }
 
@@ -101,6 +103,6 @@ func DeleteTask(c *gin.Context) {
 		return
 	}
 
-	_ = logger.Log("delete", strconv.Itoa(id))
+	_ = logger.Log(fmt.Sprintf("delete: %d", id))
 	c.Status(http.StatusNoContent)
 }
