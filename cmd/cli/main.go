@@ -12,46 +12,70 @@ import (
 
 const baseURL = "http://localhost:8080/api"
 const loginURL = "http://localhost:8080/login"
+const registerURL = "http://localhost:8080/register"
 
 var jwtToken string
 
 func main() {
-	login()
-
 	for {
-		fmt.Println("\n== TODO CLI ==")
-		fmt.Println("1. Создать задачу")
-		fmt.Println("2. Показать все задачи")
-		fmt.Println("3. Найти задачу по ID")
-		fmt.Println("4. Обновить задачу")
-		fmt.Println("5. Удалить задачу")
+		fmt.Println("== TODO CLI ==")
+		fmt.Println("1. Войти")
+		fmt.Println("2. Зарегистрироваться")
 		fmt.Println("0. Выход")
+		fmt.Print("Выберите: ")
 
 		var choice int
-		fmt.Print("Выберите опцию: ")
 		fmt.Scanln(&choice)
 
 		switch choice {
 		case 1:
-			createTask()
+			if login() {
+				runMenu()
+			}
 		case 2:
-			getAllTasks()
-		case 3:
-			getTaskByID()
-		case 4:
-			updateTask()
-		case 5:
-			deleteTask()
+			register()
 		case 0:
-			fmt.Println("Выход.")
+			fmt.Println("До свидания!")
 			return
 		default:
-			fmt.Println("Неверная опция")
+			fmt.Println("Неверный выбор")
 		}
 	}
 }
 
-func login() {
+func register() {
+	fmt.Println("== Регистрация ==")
+	fmt.Print("Логин: ")
+	var username string
+	fmt.Scanln(&username)
+
+	fmt.Print("Пароль: ")
+	var password string
+	fmt.Scanln(&password)
+
+	creds := map[string]string{
+		"username": username,
+		"password": password,
+	}
+	body, _ := json.Marshal(creds)
+
+	resp, err := http.Post(registerURL, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		fmt.Println("Ошибка запроса:", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Println("Ошибка регистрации:", resp.Status)
+		io.Copy(os.Stdout, resp.Body)
+		return
+	}
+
+	fmt.Println("Регистрация прошла успешно!")
+}
+
+func login() bool {
 	fmt.Println("== Авторизация ==")
 	fmt.Print("Логин: ")
 	var username string
@@ -77,13 +101,47 @@ func login() {
 	if resp.StatusCode != http.StatusOK {
 		fmt.Println("Ошибка авторизации:", resp.Status)
 		io.Copy(os.Stdout, resp.Body)
-		os.Exit(1)
+		return false
 	}
 
 	var result map[string]string
 	json.NewDecoder(resp.Body).Decode(&result)
 	jwtToken = result["token"]
 	fmt.Println("Успешно авторизован!")
+	return true
+}
+
+func runMenu() {
+	for {
+		fmt.Println("\n== TODO Меню ==")
+		fmt.Println("1. Создать задачу")
+		fmt.Println("2. Показать все задачи")
+		fmt.Println("3. Найти задачу по ID")
+		fmt.Println("4. Обновить задачу")
+		fmt.Println("5. Удалить задачу")
+		fmt.Println("0. Выйти")
+
+		var choice int
+		fmt.Print("Ваш выбор: ")
+		fmt.Scanln(&choice)
+
+		switch choice {
+		case 1:
+			createTask()
+		case 2:
+			getAllTasks()
+		case 3:
+			getTaskByID()
+		case 4:
+			updateTask()
+		case 5:
+			deleteTask()
+		case 0:
+			return
+		default:
+			fmt.Println("Неверная опция")
+		}
+	}
 }
 
 func createTask() {

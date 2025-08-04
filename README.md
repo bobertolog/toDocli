@@ -47,19 +47,6 @@ go run cmd/cli/main.go
 
 ---
 
-##  Пример .env файла
-
-```env
-API_USER=test
-API_PASS=test
-JWT_SECRET=supersecretjwtkey
-PORT=8080
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/tododb?sslmode=disable
-REDIS_ADDR=localhost:6379
-```
-
----
-
 ##  Возможности CLI
 
 -  Авторизация по логину и паролю  
@@ -74,12 +61,14 @@ REDIS_ADDR=localhost:6379
 ##  REST API
 
 ```
-POST   /login           — Получить JWT-токен
-GET    /api/items       — Получить все задачи
-GET    /api/item/:id    — Получить задачу по ID
-POST   /api/item        — Создать задачу
-PUT    /api/item/:id    — Обновить задачу
-DELETE /api/item/:id    — Удалить задачу
+POST   /register          — Регистрация
+POST   /login             — Авторизация
+GET    /api/items         — Получить все задачи
+GET    /api/item/:id      — Получить задачу по ID
+POST   /api/item          — Создать задачу
+PUT    /api/item/:id      — Обновить задачу
+DELETE /api/item/:id      — Удалить задачу
+
 ```
 
 ⚠️ Все запросы к `/api/*` требуют JWT токен в заголовке:  

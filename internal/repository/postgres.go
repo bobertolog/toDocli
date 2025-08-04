@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 
@@ -89,7 +90,6 @@ func (r *PostgresRepo) Delete(id int) error {
 	return err
 }
 
-// Транзакции
 func (r *PostgresRepo) WithTx(fn func(service.TaskRepository) error) error {
 	realDB, ok := r.db.(*sql.DB)
 	if !ok {
@@ -107,4 +107,43 @@ func (r *PostgresRepo) WithTx(fn func(service.TaskRepository) error) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+func (r *PostgresRepo) GetDB() *sql.DB {
+	if db, ok := r.db.(*sql.DB); ok {
+		return db
+	}
+	return nil
+}
+
+// --- Добавленные методы UserRepository ---
+
+func (r *PostgresRepo) Register(username, password string) error {
+	var exists bool
+	query := `SELECT EXISTS(SELECT 1 FROM users WHERE username=$1)`
+	err := r.db.QueryRow(query, username).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return errors.New("user already exists")
+	}
+
+	_, err = r.db.Exec(`INSERT INTO users (username, password) VALUES ($1, $2)`, username, password)
+	return err
+}
+
+func (r *PostgresRepo) Login(username, password string) error {
+	var storedPassword string
+	err := r.db.QueryRow(`SELECT password FROM users WHERE username=$1`, username).Scan(&storedPassword)
+	if err == sql.ErrNoRows {
+		return errors.New("user not found")
+	}
+	if err != nil {
+		return err
+	}
+	if storedPassword != password {
+		return errors.New("invalid password")
+	}
+	return nil
 }

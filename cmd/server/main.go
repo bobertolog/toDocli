@@ -18,39 +18,34 @@ import (
 	_ "todocli/docs"
 
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("Файл .env не найден, переменные окружения должны быть заданы вручную")
-	}
 
-	// Инициализация PostgreSQL
 	repo, err := repository.NewPostgresRepository()
 	if err != nil {
 		log.Fatalf("Ошибка подключения к PostgreSQL: %v", err)
 	}
 
-	// Создание сервиса задач
 	taskService := service.NewTaskService(repo)
 
-	// Инициализация Redis
+	// === Redis ===
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+		Addr: os.Getenv("REDIS_ADDR"), // берётся из docker-compose
 	})
+
 	logger := repository.NewRedisLogger(redisClient)
 
-	// Подключение зависимостей
 	handlers.SetService(taskService)
 	handlers.SetLogger(logger)
+	handlers.SetUserRepo(repo)
 
-	// Настройка маршрутов
 	r := gin.Default()
 
+	r.POST("/register", handlers.Register)
 	r.POST("/login", handlers.Login)
 
 	api := r.Group("/api", middleware.JWTAuth())
@@ -62,10 +57,8 @@ func main() {
 		api.DELETE("/item/:id", handlers.DeleteTask)
 	}
 
-	// Swagger
 	r.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// Запуск сервера
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

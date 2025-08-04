@@ -1,5 +1,24 @@
 basePath: /
 definitions:
+  handlers.authResp:
+    properties:
+      token:
+        type: string
+    type: object
+  handlers.loginReq:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  handlers.registerReq:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    type: object
   model.StatusType:
     enum:
     - 0
@@ -178,6 +197,70 @@ paths:
       summary: Получить все задачи
       tags:
       - tasks
+  /login:
+    post:
+      consumes:
+      - application/json
+      description: Возвращает JWT токен при успешной авторизации
+      parameters:
+      - description: Данные для входа
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.loginReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.authResp'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Авторизация
+      tags:
+      - auth
+  /register:
+    post:
+      consumes:
+      - application/json
+      description: Регистрирует пользователя с логином и паролем
+      parameters:
+      - description: Данные для регистрации
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.registerReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Регистрация нового пользователя
+      tags:
+      - auth
 schemes:
 - http
 swagger: "2.0"
