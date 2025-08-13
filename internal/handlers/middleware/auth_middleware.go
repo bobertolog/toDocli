@@ -2,8 +2,9 @@ package middleware
 
 import (
 	"net/http"
-	"os"
 	"strings"
+
+	"todocli/internal/handlers"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -16,13 +17,18 @@ func JWTAuth() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing token"})
 			return
 		}
+
 		tokenStr := strings.TrimPrefix(h, "Bearer ")
-		if _, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
-			return []byte(os.Getenv("JWT_SECRET")), nil
-		}); err != nil {
+
+		_, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+			return handlers.GetJWTSecret(), nil
+		})
+
+		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 			return
 		}
+
 		c.Next()
 	}
 }

@@ -9,7 +9,7 @@ type TaskRepository interface {
 	GetAll() []*model.Task
 	FindByID(id int) *model.Task
 	Delete(id int) error
-	WithTx(fn func(TaskRepository) error) error // ✅ добавлено для транзакций
+	WithTx(fn func(TaskRepository) error) error
 }
 
 // TaskService — интерфейс бизнес-логики
@@ -19,5 +19,6 @@ type TaskService interface {
 	GetByID(id int) (*model.Task, error)
 	Update(id int, title, desc, status string) error
 	Delete(id int) error
+	GetByStatus(status string) []*model.Task // ✅ добавлено
 	CreateWithLog(title, desc, status string, logFunc func(string) error) (*model.Task, error)
 }

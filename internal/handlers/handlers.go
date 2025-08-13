@@ -6,24 +6,38 @@ import (
 	"strconv"
 
 	"todocli/internal/model"
-	"todocli/internal/repository"
 	"todocli/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
 
 var taskService service.TaskService
-var logger *repository.RedisLogger
+
+type Logger interface {
+	Log(msg string) error
+}
+
+var logger Logger
 
 func SetService(s service.TaskService) {
 	taskService = s
 }
 
-func SetLogger(l *repository.RedisLogger) {
+func SetLogger(l Logger) {
 	logger = l
 }
 
-// POST /api/item
+// CreateTask godoc
+// @Summary Создать задачу
+// @Description Добавляет новую задачу
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Param task body model.Task true "Задача"
+// @Success 201 {object} model.Task
+// @Failure 400 {object} map[string]string
+// @Router /api/item [post]
+// @Security ApiKeyAuth
 func CreateTask(c *gin.Context) {
 	var t model.Task
 	if err := c.ShouldBindJSON(&t); err != nil {
@@ -35,7 +49,10 @@ func CreateTask(c *gin.Context) {
 		return
 	}
 	task, err := taskService.CreateWithLog(t.Title, t.Description, t.Status.String(), func(msg string) error {
-		return logger.Log(msg)
+		if logger != nil {
+			return logger.Log(msg)
+		}
+		return nil
 	})
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -44,13 +61,30 @@ func CreateTask(c *gin.Context) {
 	c.JSON(http.StatusCreated, task)
 }
 
-// GET /api/items
+// GetAllTasks godoc
+// @Summary Получить все задачи
+// @Description Возвращает список всех задач
+// @Tags tasks
+// @Produce json
+// @Success 200 {array} model.Task
+// @Router /api/items [get]
+// @Security ApiKeyAuth
 func GetAllTasks(c *gin.Context) {
 	tasks := taskService.GetAll()
 	c.JSON(http.StatusOK, tasks)
 }
 
-// GET /api/item/:id
+// GetTaskByID godoc
+// @Summary Получить задачу по ID
+// @Description Возвращает задачу по идентификатору
+// @Tags tasks
+// @Produce json
+// @Param id path int true "ID задачи"
+// @Success 200 {object} model.Task
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /api/item/{id} [get]
+// @Security ApiKeyAuth
 func GetTaskByID(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -65,7 +99,18 @@ func GetTaskByID(c *gin.Context) {
 	c.JSON(http.StatusOK, task)
 }
 
-// PUT /api/item/:id
+// UpdateTask godoc
+// @Summary Обновить задачу
+// @Description Обновляет данные задачи
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Param id path int true "ID задачи"
+// @Param task body model.Task true "Новые данные задачи"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Router /api/item/{id} [put]
+// @Security ApiKeyAuth
 func UpdateTask(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -85,11 +130,23 @@ func UpdateTask(c *gin.Context) {
 		return
 	}
 
-	_ = logger.Log(fmt.Sprintf("update: %d", id))
+	if logger != nil {
+		_ = logger.Log(fmt.Sprintf("update: %d", id))
+	}
 	c.JSON(http.StatusOK, gin.H{"result": "updated"})
 }
 
-// DELETE /api/item/:id
+// DeleteTask godoc
+// @Summary Удалить задачу
+// @Description Удаляет задачу по ID
+// @Tags tasks
+// @Produce json
+// @Param id path int true "ID задачи"
+// @Success 204 {string} string "No Content"
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /api/item/{id} [delete]
+// @Security ApiKeyAuth
 func DeleteTask(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -103,6 +160,8 @@ func DeleteTask(c *gin.Context) {
 		return
 	}
 
-	_ = logger.Log(fmt.Sprintf("delete: %d", id))
+	if logger != nil {
+		_ = logger.Log(fmt.Sprintf("delete: %d", id))
+	}
 	c.Status(http.StatusNoContent)
 }

@@ -1,3 +1,9 @@
+// @title Task Manager API
+// @version 1.0
+// @description API для управления задачами
+// @host localhost:8080
+// @BasePath /
+// @schemes http
 package main
 
 import (
@@ -12,45 +18,44 @@ import (
 	_ "todocli/docs"
 
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func main() {
-	// Загружаем переменные окружения из .env
-	_ = godotenv.Load()
 
-	// Подключаемся к PostgreSQL
 	repo, err := repository.NewPostgresRepository()
 	if err != nil {
 		log.Fatalf("Ошибка подключения к PostgreSQL: %v", err)
 	}
 
-	// Создаём сервис задач
 	taskService := service.NewTaskService(repo)
 
-	// Подключаемся к Redis для логгирования
-	redisClient := connectRedis()
+	// === Redis ===
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: os.Getenv("REDIS_ADDR"), // берётся из docker-compose
+	})
+
 	logger := repository.NewRedisLogger(redisClient)
 
-	// Передаём зависимости в handlers
 	handlers.SetService(taskService)
 	handlers.SetLogger(logger)
+	handlers.SetUserRepo(repo)
 
-	// Настраиваем Gin HTTP сервер
 	r := gin.Default()
 
-	// Роуты
+	r.POST("/register", handlers.Register)
 	r.POST("/login", handlers.Login)
 
-	auth := r.Group("/api", middleware.JWTAuth())
-	auth.POST("/item", handlers.CreateTask)
-	auth.GET("/items", handlers.GetAllTasks)
-	auth.GET("/item/:id", handlers.GetTaskByID)
-	auth.PUT("/item/:id", handlers.UpdateTask)
-	auth.DELETE("/item/:id", handlers.DeleteTask)
+	api := r.Group("/api", middleware.JWTAuth())
+	{
+		api.POST("/item", handlers.CreateTask)
+		api.GET("/items", handlers.GetAllTasks)
+		api.GET("/item/:id", handlers.GetTaskByID)
+		api.PUT("/item/:id", handlers.UpdateTask)
+		api.DELETE("/item/:id", handlers.DeleteTask)
+	}
 
 	r.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
@@ -58,11 +63,7 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	r.Run(":" + port)
-}
-
-func connectRedis() *redis.Client {
-	return redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-	})
+	if err := r.Run(":" + port); err != nil {
+		log.Fatal(err)
+	}
 }
